@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================
+  BPMN 2.0 Process: alert-investigation-v1
+  Engine: Camunda 8.7 (Zeebe)
+
+  Flow:
+    START
+      → L1 Alert Analysis
+          ESCALATE  → L2 Alert Analysis
+          CLOSE     → END
+
+      → L2 Alert Analysis
+          ESCALATE  → QA Analysis
+          CLOSE     → END
+          SEND_BACK → L1 Alert Analysis  (loop)
+
+      → QA Analysis
+          CLOSE     → Compliance Check → END
+          SEND_BACK → L2 Alert Analysis  (loop)
+
+  Camunda process variables (written by WLC, camundaVar: true):
+    L1: alertSource, severity, isFalsePositive, action
+    L2: attackVector, containmentTaken, riskScore, action
+    QA: investigationQuality, finalClassification, complianceFlag, action
+  ============================================================================
+-->
+<definitions
+  xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  targetNamespace="http://alert-investigation"
+  exporter="WLC Generator"
+  exporterVersion="1.0">
+
+  <process id="alert-investigation-v1"
+           name="Alert Investigation"
+           isExecutable="true">
+
+    <extensionElements>
+      <zeebe:properties>
+        <zeebe:property name="processVersion" value="1.0.0"/>
+        <zeebe:property name="wlcOwner"       value="SOC Platform"/>
+      </zeebe:properties>
+    </extensionElements>
+
+    <!-- ── START ─────────────────────────────────────────────────────────── -->
+    <startEvent id="start-event" name="Alert Received">
+      <outgoing>flow-start-to-l1</outgoing>
+    </startEvent>
+
+    <!-- ── L1 ALERT ANALYSIS ─────────────────────────────────────────────── -->
+    <userTask id="step-l1-analysis" name="L1 Alert Analysis">
+      <documentation>
+        Initial triage. Analyst assesses severity and false-positive likelihood.
+        Actions: ESCALATE (to L2) | CLOSE
+        Note: SEND_BACK is not available — L1 is the entry point.
+      </documentation>
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="l1-analysts"/>
+        <zeebe:formDefinition formKey="step-l1-analysis"/>
+        <zeebe:taskHeaders>
+          <zeebe:header key="wlcStepId"   value="step-l1-analysis"/>
+          <zeebe:header key="wlcWorkflow" value="alert-investigation-v1"/>
+        </zeebe:taskHeaders>
+      </extensionElements>
+      <incoming>flow-start-to-l1</incoming>
+      <incoming>flow-l2-sendback-to-l1</incoming>
+      <outgoing>flow-l1-to-gw</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="gw-l1" name="L1 Decision">
+      <incoming>flow-l1-to-gw</incoming>
+      <outgoing>flow-l1-escalate</outgoing>
+      <outgoing>flow-l1-close</outgoing>
+    </exclusiveGateway>
+
+    <!-- ── L2 ALERT ANALYSIS ─────────────────────────────────────────────── -->
+    <userTask id="step-l2-analysis" name="L2 Alert Analysis">
+      <documentation>
+        Deep-dive investigation. Analyst identifies attack vector, IOCs, blast radius,
+        applies containment if needed.
+        Actions: ESCALATE (to QA) | CLOSE | SEND_BACK (to L1)
+      </documentation>
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="l2-analysts"/>
+        <zeebe:formDefinition formKey="step-l2-analysis"/>
+        <zeebe:taskHeaders>
+          <zeebe:header key="wlcStepId"   value="step-l2-analysis"/>
+          <zeebe:header key="wlcWorkflow" value="alert-investigation-v1"/>
+        </zeebe:taskHeaders>
+      </extensionElements>
+      <incoming>flow-l1-escalate</incoming>
+      <incoming>flow-qa-sendback-to-l2</incoming>
+      <outgoing>flow-l2-to-gw</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="gw-l2" name="L2 Decision">
+      <incoming>flow-l2-to-gw</incoming>
+      <outgoing>flow-l2-escalate</outgoing>
+      <outgoing>flow-l2-close</outgoing>
+      <outgoing>flow-l2-sendback</outgoing>
+    </exclusiveGateway>
+
+    <!-- ── QA ANALYSIS ───────────────────────────────────────────────────── -->
+    <userTask id="step-qa-analysis" name="QA Analysis">
+      <documentation>
+        Quality assurance review of the full investigation chain.
+        Applies final threat classification and compliance flags.
+        Actions: CLOSE | SEND_BACK (to L2)
+        Note: ESCALATE is not available — QA is the final level.
+      </documentation>
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="qa-analysts"/>
+        <zeebe:formDefinition formKey="step-qa-analysis"/>
+        <zeebe:taskHeaders>
+          <zeebe:header key="wlcStepId"   value="step-qa-analysis"/>
+          <zeebe:header key="wlcWorkflow" value="alert-investigation-v1"/>
+        </zeebe:taskHeaders>
+      </extensionElements>
+      <incoming>flow-l2-escalate</incoming>
+      <outgoing>flow-qa-to-gw</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="gw-qa" name="QA Decision">
+      <incoming>flow-qa-to-gw</incoming>
+      <outgoing>flow-qa-close</outgoing>
+      <outgoing>flow-qa-sendback</outgoing>
+    </exclusiveGateway>
+
+    <!-- ── COMPLIANCE CHECK (post-QA close) ──────────────────────────────── -->
+    <exclusiveGateway id="gw-compliance" name="Compliance Required?">
+      <incoming>flow-qa-close</incoming>
+      <outgoing>flow-compliance-yes</outgoing>
+      <outgoing>flow-compliance-no</outgoing>
+    </exclusiveGateway>
+
+    <serviceTask id="task-compliance-notify" name="Compliance Notification">
+      <documentation>
+        Notifies the relevant regulatory team when complianceFlag != "None".
+        Implemented as a Zeebe job worker (type: compliance-notify).
+      </documentation>
+      <extensionElements>
+        <zeebe:taskDefinition type="compliance-notify" retries="3"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="= complianceFlag"      target="complianceFlag"/>
+          <zeebe:input source="= finalClassification" target="finalClassification"/>
+          <zeebe:input source="= alertId"             target="alertId"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>flow-compliance-yes</incoming>
+      <outgoing>flow-compliance-to-end</outgoing>
+    </serviceTask>
+
+    <!-- ── END EVENTS ────────────────────────────────────────────────────── -->
+    <endEvent id="end-l1-closed" name="Closed at L1">
+      <incoming>flow-l1-close</incoming>
+    </endEvent>
+
+    <endEvent id="end-l2-closed" name="Closed at L2">
+      <incoming>flow-l2-close</incoming>
+    </endEvent>
+
+    <endEvent id="end-qa-closed" name="Investigation Complete">
+      <incoming>flow-compliance-no</incoming>
+      <incoming>flow-compliance-to-end</incoming>
+    </endEvent>
+
+    <!-- ── SEQUENCE FLOWS ────────────────────────────────────────────────── -->
+
+    <sequenceFlow id="flow-start-to-l1"   sourceRef="start-event"     targetRef="step-l1-analysis"/>
+    <sequenceFlow id="flow-l1-to-gw"      sourceRef="step-l1-analysis" targetRef="gw-l1"/>
+
+    <sequenceFlow id="flow-l1-escalate" name="ESCALATE" sourceRef="gw-l1" targetRef="step-l2-analysis">
+      <conditionExpression xsi:type="tFormalExpression">= action = "ESCALATE"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flow-l1-close" name="CLOSE" sourceRef="gw-l1" targetRef="end-l1-closed">
+      <conditionExpression xsi:type="tFormalExpression">= action = "CLOSE"</conditionExpression>
+    </sequenceFlow>
+
+    <sequenceFlow id="flow-l2-to-gw"      sourceRef="step-l2-analysis" targetRef="gw-l2"/>
+
+    <sequenceFlow id="flow-l2-escalate" name="ESCALATE" sourceRef="gw-l2" targetRef="step-qa-analysis">
+      <conditionExpression xsi:type="tFormalExpression">= action = "ESCALATE"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flow-l2-close" name="CLOSE" sourceRef="gw-l2" targetRef="end-l2-closed">
+      <conditionExpression xsi:type="tFormalExpression">= action = "CLOSE"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flow-l2-sendback" name="SEND_BACK" sourceRef="gw-l2" targetRef="step-l1-analysis">
+      <conditionExpression xsi:type="tFormalExpression">= action = "SEND_BACK"</conditionExpression>
+    </sequenceFlow>
+    <!-- Named alias used as incoming ref on L1 task -->
+    <sequenceFlow id="flow-l2-sendback-to-l1" sourceRef="gw-l2" targetRef="step-l1-analysis"/>
+
+    <sequenceFlow id="flow-qa-to-gw"       sourceRef="step-qa-analysis" targetRef="gw-qa"/>
+
+    <sequenceFlow id="flow-qa-close" name="CLOSE" sourceRef="gw-qa" targetRef="gw-compliance">
+      <conditionExpression xsi:type="tFormalExpression">= action = "CLOSE"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flow-qa-sendback" name="SEND_BACK" sourceRef="gw-qa" targetRef="step-l2-analysis">
+      <conditionExpression xsi:type="tFormalExpression">= action = "SEND_BACK"</conditionExpression>
+    </sequenceFlow>
+    <!-- Named alias used as incoming ref on L2 task -->
+    <sequenceFlow id="flow-qa-sendback-to-l2" sourceRef="gw-qa" targetRef="step-l2-analysis"/>
+
+    <sequenceFlow id="flow-compliance-yes" name="Yes" sourceRef="gw-compliance" targetRef="task-compliance-notify">
+      <conditionExpression xsi:type="tFormalExpression">= complianceFlag != "None"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flow-compliance-no" name="No" sourceRef="gw-compliance" targetRef="end-qa-closed">
+      <conditionExpression xsi:type="tFormalExpression">= complianceFlag = "None"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flow-compliance-to-end" sourceRef="task-compliance-notify" targetRef="end-qa-closed"/>
+
+  </process>
+
+  <!-- ── BPMN Diagram Layout (Camunda Modeler coordinates) ─────────────── -->
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="alert-investigation-v1">
+
+      <bpmndi:BPMNShape id="s-start"      bpmnElement="start-event"><dc:Bounds x="82" y="272" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s-l1"         bpmnElement="step-l1-analysis"><dc:Bounds x="170" y="250" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s-gw-l1"      bpmnElement="gw-l1" isMarkerVisible="true"><dc:Bounds x="385" y="265" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s-l2"         bpmnElement="step-l2-analysis"><dc:Bounds x="490" y="250" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s-gw-l2"      bpmnElement="gw-l2" isMarkerVisible="true"><dc:Bounds x="705" y="265" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s-qa"         bpmnElement="step-qa-analysis"><dc:Bounds x="810" y="250" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s-gw-qa"      bpmnElement="gw-qa" isMarkerVisible="true"><dc:Bounds x="1025" y="265" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s-gw-comp"    bpmnElement="gw-compliance" isMarkerVisible="true"><dc:Bounds x="1130" y="265" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s-comp-task"  bpmnElement="task-compliance-notify"><dc:Bounds x="1100" y="140" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s-end-l1"     bpmnElement="end-l1-closed"><dc:Bounds x="387" y="410" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s-end-l2"     bpmnElement="end-l2-closed"><dc:Bounds x="707" y="410" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s-end-qa"     bpmnElement="end-qa-closed"><dc:Bounds x="1312" y="272" width="36" height="36"/></bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="e-start-l1"   bpmnElement="flow-start-to-l1"><di:waypoint x="118" y="290"/><di:waypoint x="170" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e-l1-gw"      bpmnElement="flow-l1-to-gw"><di:waypoint x="330" y="290"/><di:waypoint x="385" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e-l1-esc"     bpmnElement="flow-l1-escalate"><di:waypoint x="435" y="290"/><di:waypoint x="490" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e-l1-close"   bpmnElement="flow-l1-close"><di:waypoint x="410" y="315"/><di:waypoint x="410" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e-l2-gw"      bpmnElement="flow-l2-to-gw"><di:waypoint x="650" y="290"/><di:waypoint x="705" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e-l2-esc"     bpmnElement="flow-l2-escalate"><di:waypoint x="755" y="290"/><di:waypoint x="810" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e-l2-close"   bpmnElement="flow-l2-close"><di:waypoint x="730" y="315"/><di:waypoint x="730" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e-l2-sb"      bpmnElement="flow-l2-sendback"><di:waypoint x="730" y="265"/><di:waypoint x="730" y="210"/><di:waypoint x="250" y="210"/><di:waypoint x="250" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e-qa-gw"      bpmnElement="flow-qa-to-gw"><di:waypoint x="970" y="290"/><di:waypoint x="1025" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e-qa-close"   bpmnElement="flow-qa-close"><di:waypoint x="1075" y="290"/><di:waypoint x="1130" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e-qa-sb"      bpmnElement="flow-qa-sendback"><di:waypoint x="1050" y="265"/><di:waypoint x="1050" y="160"/><di:waypoint x="570" y="160"/><di:waypoint x="570" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e-comp-yes"   bpmnElement="flow-compliance-yes"><di:waypoint x="1155" y="265"/><di:waypoint x="1155" y="220"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e-comp-no"    bpmnElement="flow-compliance-no"><di:waypoint x="1180" y="290"/><di:waypoint x="1312" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e-comp-end"   bpmnElement="flow-compliance-to-end"><di:waypoint x="1260" y="180"/><di:waypoint x="1330" y="180"/><di:waypoint x="1330" y="272"/></bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</definitions>

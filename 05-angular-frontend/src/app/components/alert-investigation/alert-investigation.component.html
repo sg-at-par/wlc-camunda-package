@@ -1,0 +1,128 @@
+<!-- alert-investigation.component.html -->
+<div class="shell">
+
+  <!-- ── LEFT SIDEBAR ─────────────────────────────────────────────────────── -->
+  <wlc-workflow-sidebar />
+
+  <!-- ── MAIN FORM AREA ───────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- COMPLETE SCREEN -->
+    <div class="complete-screen" *ngIf="state.isComplete()">
+      <div class="complete-icon">
+        {{ state.finalAction() === 'CLOSE' ? '✅' : '↩' }}
+      </div>
+      <div class="complete-title">
+        {{ state.finalAction() === 'CLOSE' ? 'Investigation Closed' : 'Sent Back for Rework' }}
+      </div>
+      <div class="complete-sub">
+        <ng-container *ngIf="state.finalAction() === 'CLOSE'">
+          The alert investigation has been closed. All data routed —
+          Camunda variables submitted, WLC business data stored.
+        </ng-container>
+        <ng-container *ngIf="state.finalAction() === 'SEND_BACK'">
+          Step returned to the previous level with a request for more information.
+        </ng-container>
+      </div>
+
+      <!-- Summary of Camunda vars -->
+      <div class="summary-box" *ngIf="getCamundaVarEntries().length > 0">
+        <div class="summary-title">Camunda Variables Submitted</div>
+        <div class="kv-row" *ngFor="let pair of getCamundaVarEntries()">
+          <span class="kv-key">{{ pair[0] }}</span>
+          <span class="kv-value">{{ pair[1] }}</span>
+        </div>
+      </div>
+
+      <button class="btn-restart" (click)="restart()">Start New Investigation</button>
+    </div>
+
+    <!-- ACTIVE FORM -->
+    <ng-container *ngIf="!state.isComplete() && schema() as currentSchema">
+
+      <!-- Header -->
+      <div class="form-header">
+        <div>
+          <div class="form-title">
+            {{ currentSchema.title }}
+            <span *ngIf="severityColor()" class="sev-badge"
+                  [style.color]="severityColor()"
+                  [style.border-color]="severityColor()"
+                  [style.background]="severityColor()! + '20'">
+              {{ state.camundaVars()['severity'] }}
+            </span>
+          </div>
+          <div class="form-sub">{{ currentSchema.subtitle }} · {{ currentSchema.stepId }}</div>
+        </div>
+
+        <!-- Available action pills -->
+        <div class="action-pills">
+          <span *ngFor="let action of currentSchema.availableActions"
+                class="action-pill"
+                [style.color]="actionMeta[action].color"
+                [style.border-color]="actionMeta[action].border"
+                [style.background]="actionMeta[action].bg">
+            {{ actionMeta[action].icon }} {{ action }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Form card -->
+      <div class="form-card">
+        <div class="form-card-head">
+          <span class="head-stat">
+            {{ currentSchema.schema | fieldCount:true }} camunda vars
+          </span>
+          <span class="head-sep">·</span>
+          <span class="head-stat">
+            {{ currentSchema.schema | fieldCount:false }} wlc fields
+          </span>
+          <span class="head-sep">·</span>
+          <span class="head-stat">
+            actions: {{ currentSchema.availableActions.join(' | ') }}
+          </span>
+        </div>
+
+        <!-- Dynamic fields -->
+        <form [formGroup]="form()">
+          <wlc-dynamic-field
+            *ngFor="let field of currentSchema.schema"
+            [field]="field"
+            [control]="getControl(field.id)"
+            [allValues]="allValues()"
+          />
+        </form>
+      </div>
+
+      <!-- Action bar -->
+      <div class="action-bar">
+        <div class="action-bar-head">Submit & Route</div>
+        <div class="action-bar-body">
+
+          <ng-container *ngFor="let action of actionKeys">
+            <button *ngIf="isActionAvailable(action)"
+                    class="btn-action"
+                    [style.color]="actionMeta[action].color"
+                    [style.border-color]="actionMeta[action].border"
+                    [style.background]="actionMeta[action].bg"
+                    (click)="submit(action)">
+              <span>{{ actionMeta[action].icon }}</span>
+              {{ actionMeta[action].label }}
+              <span class="btn-next-hint">{{ getNextLabel(action) }}</span>
+            </button>
+          </ng-container>
+
+          <span class="action-hint">Select action to validate &amp; submit</span>
+        </div>
+      </div>
+
+    </ng-container>
+  </main>
+
+  <!-- ── RIGHT PANEL ───────────────────────────────────────────────────────── -->
+  <wlc-data-panel
+    [schema]="schema() ?? undefined"
+    [currentValues]="allValues()"
+  />
+
+</div>
