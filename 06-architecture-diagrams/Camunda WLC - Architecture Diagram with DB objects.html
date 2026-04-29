@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WLC · Camunda 8.7 — Architecture v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090e;--s1:#0c0f17;--s2:#10141f;--s3:#151a28;
+  --b1:#1a2033;--b2:#232b42;--b3:#2d3654;
+  --blue:#4f8ef7;--bld:rgba(79,142,247,.10);
+  --cam:#e8604c;--cmd:rgba(232,96,76,.10);
+  --green:#3ec97a;--gd:rgba(62,201,122,.10);
+  --violet:#a78bfa;--vd:rgba(167,139,250,.10);
+  --amber:#f59e0b;--amd:rgba(245,158,11,.10);
+  --red:#ef4444;--rd:rgba(239,68,68,.10);
+  --teal:#14b8a6;--td:rgba(20,184,166,.10);
+  --slate:#64748b;--sld:rgba(100,116,139,.10);
+  --txt:#cdd5e8;--txt2:#6b7a9e;--txt3:#333d56;
+  --mono:'IBM Plex Mono',monospace;--sans:'Barlow',sans-serif;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh;position:relative;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
+body::after{content:'';position:fixed;top:-180px;left:50%;transform:translateX(-50%);width:800px;height:420px;background:radial-gradient(ellipse,rgba(79,142,247,.06) 0%,transparent 70%);pointer-events:none;z-index:0;}
+
+.hdr{position:relative;z-index:10;padding:32px 52px 22px;border-bottom:1px solid var(--b1);display:flex;align-items:flex-start;justify-content:space-between;gap:32px;background:linear-gradient(180deg,rgba(79,142,247,.04) 0%,transparent 100%);}
+.hdr-eye{font-family:var(--mono);font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--blue);display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.hdr-eye::before{content:'';width:24px;height:1px;background:var(--blue);}
+.hdr h1{font-size:clamp(20px,2.6vw,32px);font-weight:900;line-height:1.05;letter-spacing:-.03em;color:#fff;}
+.hdr h1 em{color:var(--blue);font-style:normal;}
+.hdr-sub{font-family:var(--mono);font-size:10px;color:var(--txt2);margin-top:8px;line-height:1.7;max-width:560px;}
+.hdr-tags{display:flex;flex-wrap:wrap;gap:7px;justify-content:flex-end;padding-top:4px;flex-shrink:0;}
+.tag{font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border-radius:3px;border:1px solid;}
+.tb{color:var(--blue);border-color:rgba(79,142,247,.35);background:var(--bld);}
+.tg{color:var(--green);border-color:rgba(62,201,122,.35);background:var(--gd);}
+.tt{color:var(--teal);border-color:rgba(20,184,166,.35);background:var(--td);}
+.tc{color:var(--cam);border-color:rgba(232,96,76,.35);background:var(--cmd);}
+.tv{color:var(--violet);border-color:rgba(167,139,250,.35);background:var(--vd);}
+.ta{color:var(--amber);border-color:rgba(245,158,11,.35);background:var(--amd);}
+.tr{color:var(--red);border-color:rgba(239,68,68,.35);background:var(--rd);}
+.ts{color:var(--slate);border-color:rgba(100,116,139,.3);background:var(--sld);border-style:dashed;}
+
+.legend{position:relative;z-index:5;padding:10px 52px;border-bottom:1px solid var(--b1);display:flex;flex-wrap:wrap;gap:20px;align-items:center;background:var(--s1);}
+.leg{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:9.5px;color:var(--txt2);}
+.ldot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.leg-hint{margin-left:auto;font-family:var(--mono);font-size:8.5px;color:var(--txt3);}
+
+.wrap{position:relative;z-index:2;padding:28px 52px 48px;display:flex;flex-direction:column;gap:0;}
+
+.zone{border:1px solid var(--b2);border-radius:12px;background:var(--s1);position:relative;}
+.zone-lbl{position:absolute;top:-11px;left:20px;font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;padding:2px 12px;border-radius:4px;border:1px solid;background:var(--bg);}
+.zb{border-color:rgba(79,142,247,.28);}.zb .zone-lbl{color:var(--blue);border-color:rgba(79,142,247,.3);}
+.zc{border-color:rgba(232,96,76,.28);}.zc .zone-lbl{color:var(--cam);border-color:rgba(232,96,76,.3);}
+.zv{border-color:rgba(167,139,250,.28);}.zv .zone-lbl{color:var(--violet);border-color:rgba(167,139,250,.3);}
+.zt{border-color:rgba(20,184,166,.28);}.zt .zone-lbl{color:var(--teal);border-color:rgba(20,184,166,.3);}
+.za{border-color:rgba(245,158,11,.28);}.za .zone-lbl{color:var(--amber);border-color:rgba(245,158,11,.3);}
+.zgrid{padding:26px 20px 18px;display:grid;gap:10px;}
+.g2{grid-template-columns:repeat(2,1fr);}
+.g3{grid-template-columns:repeat(3,1fr);}
+.g4{grid-template-columns:repeat(4,1fr);}
+.sp2{grid-column:span 2;}.sp3{grid-column:span 3;}.sp4{grid-column:span 4;}
+
+.nd{background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:13px 14px;position:relative;transition:border-color .18s,box-shadow .18s,transform .18s;cursor:pointer;}
+.nd:hover{border-color:var(--b3);box-shadow:0 6px 28px rgba(0,0,0,.55);transform:translateY(-2px);z-index:20;}
+.nd::before{content:'';position:absolute;left:0;top:10%;bottom:10%;width:2.5px;border-radius:1px;}
+.ab::before{background:var(--blue);}.ac::before{background:var(--cam);}
+.ag::before{background:var(--green);}.av::before{background:var(--violet);}
+.aa::before{background:var(--amber);}.ar::before{background:var(--red);}
+.at::before{background:var(--teal);}.asl::before{background:var(--slate);}
+.nd-p2{opacity:.45;background:rgba(12,15,23,.5);}
+.nd-p2::after{content:'PHASE 2';position:absolute;top:7px;right:8px;font-family:var(--mono);font-size:7px;letter-spacing:.15em;padding:1px 6px;border-radius:2px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.2);color:var(--slate);}
+
+.nd-hd{display:flex;align-items:flex-start;gap:9px;margin-bottom:8px;}
+.ic{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-top:1px;}
+.icb{background:rgba(79,142,247,.15);}.icc{background:rgba(232,96,76,.15);}
+.icg{background:rgba(62,201,122,.15);}.icv{background:rgba(167,139,250,.15);}
+.ica{background:rgba(245,158,11,.15);}.icr{background:rgba(239,68,68,.15);}
+.ict{background:rgba(20,184,166,.15);}.ics{background:rgba(100,116,139,.12);}
+.ntitle{font-size:12px;font-weight:700;color:#e8edf7;line-height:1.2;}
+.nsub{font-family:var(--mono);font-size:8.5px;color:var(--txt3);text-transform:uppercase;letter-spacing:.07em;margin-top:2px;line-height:1.5;}
+.nbody{font-family:var(--mono);font-size:9.5px;color:var(--txt2);line-height:1.8;margin-top:2px;}
+.nbody li{list-style:none;padding-left:12px;position:relative;}
+.nbody li::before{content:'›';position:absolute;left:0;color:var(--txt3);}
+
+.arr{display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 0;position:relative;z-index:3;}
+.aline{width:1px;height:22px;background:linear-gradient(var(--b2),var(--b3));}
+.atip{color:var(--b3);font-size:10px;}
+.albl{font-family:var(--mono);font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;padding:3px 14px;background:var(--s2);border:1px solid var(--b1);border-radius:20px;color:var(--txt3);white-space:nowrap;}
+
+.divrow{position:relative;z-index:4;display:flex;align-items:center;gap:14px;padding:14px 0;}
+.divline{flex:1;height:1px;background:linear-gradient(90deg,transparent,var(--b2),transparent);}
+.divlbl{font-family:var(--mono);font-size:8px;letter-spacing:.22em;text-transform:uppercase;padding:4px 14px;border:1px solid var(--b1);border-radius:30px;background:var(--s1);color:var(--txt3);white-space:nowrap;}
+
+.row{margin-bottom:18px;}
+
+.alert-strip{border-radius:7px;padding:10px 14px;font-family:var(--mono);font-size:9.5px;line-height:1.65;display:flex;gap:10px;align-items:flex-start;margin-top:10px;}
+.ab-strip{background:rgba(79,142,247,.05);border:1px solid rgba(79,142,247,.2);color:#93b8ff;}
+.ar-strip{background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.2);color:var(--red);}
+.ag-strip{background:rgba(62,201,122,.05);border:1px solid rgba(62,201,122,.2);color:var(--green);}
+.aa-strip{background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.2);color:var(--amber);}
+
+.apicalls{display:flex;flex-direction:column;gap:7px;padding:12px 14px;background:rgba(20,184,166,.04);border:1px solid rgba(20,184,166,.15);border-radius:7px;margin-top:10px;}
+.apicall{font-family:var(--mono);font-size:9px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+.mth{font-size:8px;padding:1px 6px;border-radius:3px;font-weight:700;flex-shrink:0;}
+.mpost{background:rgba(62,201,122,.15);color:var(--green);}
+.mget{background:rgba(79,142,247,.15);color:var(--blue);}
+.mdel{background:rgba(239,68,68,.15);color:var(--red);}
+.apath{color:var(--teal);}
+.adesc{color:var(--txt3);font-size:8.5px;}
+.apayload{font-size:8px;color:var(--txt3);padding-left:64px;margin-top:2px;line-height:1.6;}
+.apayload span{color:var(--txt2);}
+
+.socflow{background:var(--s1);border:1px solid var(--b2);border-radius:10px;padding:22px 18px 18px;position:relative;}
+.soclbl{position:absolute;top:-11px;left:18px;font-family:var(--mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;padding:2px 12px;border-radius:4px;border:1px solid rgba(20,184,166,.3);background:var(--bg);color:var(--teal);}
+.socsteps{display:flex;align-items:stretch;gap:8px;}
+.socstep{flex:1;background:var(--s3);border:1px solid var(--b2);border-radius:8px;padding:12px 12px 10px;display:flex;flex-direction:column;gap:6px;}
+.ssrole{font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--txt3);}
+.sshd{font-size:12px;font-weight:700;color:#e8edf7;}
+.ssacts{display:flex;flex-wrap:wrap;gap:5px;}
+.act{font-family:var(--mono);font-size:8px;padding:2px 8px;border-radius:3px;border:1px solid;}
+.actg{color:var(--green);border-color:rgba(62,201,122,.3);background:rgba(62,201,122,.07);}
+.actr{color:var(--red);border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.07);}
+.acta{color:var(--amber);border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.07);}
+.ssvars{font-family:var(--mono);font-size:8px;color:var(--teal);margin-top:2px;}
+.ssdi{font-family:var(--mono);font-size:8.5px;padding:4px 8px;border-radius:4px;border:1px solid;margin-bottom:3px;line-height:1.5;}
+.dig{color:var(--green);border-color:rgba(62,201,122,.25);background:rgba(62,201,122,.06);}
+.dia{color:var(--amber);border-color:rgba(245,158,11,.25);background:rgba(245,158,11,.06);}
+.ssdlbl{font-family:var(--mono);font-size:8px;color:var(--txt3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;}
+.socarr{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;flex-shrink:0;}
+.socarrb{width:1px;height:40px;background:var(--b2);}
+.socarrt{color:var(--b3);font-size:9px;}
+.socarrl{font-family:var(--mono);font-size:7px;color:var(--txt3);writing-mode:vertical-rl;letter-spacing:.1em;text-transform:uppercase;}
+
+.pipe-wrap{background:var(--s1);border:1px solid var(--b2);border-radius:10px;padding:20px 20px 16px;position:relative;}
+.pipe-lbl{position:absolute;top:-11px;left:18px;font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;padding:2px 12px;border-radius:4px;border:1px solid rgba(79,142,247,.3);background:var(--bg);color:var(--blue);}
+.pipe{display:flex;align-items:flex-start;}
+.pstep{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;}
+.pbox{width:100%;background:var(--s3);border:1px solid var(--b2);border-radius:6px;padding:7px 8px;font-family:var(--mono);font-size:9px;color:var(--txt);text-align:center;line-height:1.4;}
+.psub{font-family:var(--mono);font-size:8px;color:var(--txt3);text-align:center;letter-spacing:.06em;}
+.parr{flex:0 0 24px;height:1px;background:var(--b2);position:relative;top:-20px;align-self:flex-start;margin-top:20px;}
+.parr::after{content:'▸';position:absolute;right:-5px;top:-6px;font-size:9px;color:var(--b3);}
+
+.dbwrap{position:relative;z-index:2;padding:0 52px;margin-bottom:20px;}
+.csection{margin-bottom:14px;border:1px solid var(--b2);border-radius:12px;overflow:hidden;}
+.chdr{display:flex;align-items:center;gap:14px;padding:13px 22px;background:var(--s1);cursor:pointer;user-select:none;transition:background .15s;}
+.chdr:hover{background:var(--s2);}
+.ctoggle{width:22px;height:22px;border-radius:5px;background:var(--s3);border:1px solid var(--b2);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--txt2);flex-shrink:0;transition:transform .25s,background .15s;}
+.ctoggle.open{transform:rotate(90deg);}
+.ctitle{font-size:13px;font-weight:800;color:#e8edf7;letter-spacing:-.01em;}
+.csub{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-left:auto;}
+.cbadge{font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;padding:3px 10px;border-radius:3px;border:1px solid;margin-left:6px;}
+.cbadge-b{color:var(--blue);border-color:rgba(79,142,247,.3);background:var(--bld);}
+.cbadge-c{color:var(--cam);border-color:rgba(232,96,76,.3);background:var(--cmd);}
+.cbody{display:none;background:var(--bg);border-top:1px solid var(--b1);padding:24px;}
+.cbody.open{display:block;}
+.dbgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.dbgrid2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+
+.ddlcard{background:var(--s1);border:1px solid var(--b1);border-radius:10px;overflow:hidden;transition:border-color .18s,box-shadow .18s;}
+.ddlcard:hover{border-color:var(--b2);box-shadow:0 4px 20px rgba(0,0,0,.5);}
+.ddlchdr{padding:10px 14px 8px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--b1);cursor:pointer;user-select:none;transition:background .12s;}
+.ddlchdr:hover{background:var(--s2);}
+.ddlicon{font-size:14px;}
+.ddlname{font-family:var(--mono);font-size:11px;font-weight:500;color:#c7d2f0;letter-spacing:.03em;}
+.ddlbadge{margin-left:auto;font-family:var(--mono);font-size:7.5px;padding:1px 7px;border-radius:3px;border:1px solid;}
+.ddlbadge-b{color:var(--blue);border-color:rgba(79,142,247,.3);}
+.ddlbadge-c{color:var(--cam);border-color:rgba(232,96,76,.3);}
+.ddltog{font-size:9px;color:var(--txt3);transition:transform .2s;flex-shrink:0;}
+.ddltog.open{transform:rotate(90deg);}
+.tbl-purpose{padding:7px 14px;background:rgba(20,184,166,.04);border-bottom:1px solid var(--b1);font-family:var(--mono);font-size:8.5px;color:var(--teal);line-height:1.55;font-style:italic;}
+.ddlcols{padding:9px 14px 11px;display:flex;flex-direction:column;gap:1px;}
+.col{display:flex;align-items:baseline;gap:5px;font-family:var(--mono);font-size:8.5px;line-height:1.75;}
+.cn{color:#8899c4;min-width:155px;flex-shrink:0;}
+.ct{color:var(--teal);min-width:90px;flex-shrink:0;}
+.cc{color:var(--txt3);font-size:8px;}
+.cpk .cn{color:var(--amber);}
+.cfk .cn{color:var(--blue);}
+.cidx .cn{color:var(--green);}
+.cjsonb .ct{color:var(--green);}
+.cimmut .cn{color:var(--red);}
+.cdiv{height:1px;background:var(--b1);margin:3px 0;}
+.cnote-warn{color:var(--amber);}
+.cnote-red{color:var(--red);opacity:.85;}
+
+.drawer{position:relative;z-index:2;padding:0 52px;margin-bottom:16px;}
+.drawer-inner{background:var(--s2);border:1px solid var(--b2);border-radius:8px;overflow:hidden;animation:dIn .2s ease;}
+@keyframes dIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.drw-hd{padding:12px 18px;background:var(--s3);border-bottom:1px solid var(--b1);display:flex;justify-content:space-between;align-items:center;}
+.drw-title{font-size:13px;font-weight:700;color:#fff;}
+.drw-sub{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-top:2px;}
+.drw-close{background:none;border:1px solid var(--b2);color:var(--txt2);cursor:pointer;font-size:13px;padding:2px 8px;border-radius:4px;font-family:var(--mono);transition:all .15s;}
+.drw-close:hover{color:var(--txt);border-color:var(--b3);}
+.drw-body{display:grid;grid-template-columns:1fr 1fr 1fr;}
+.drw-sec{padding:14px 18px;border-right:1px solid var(--b1);}
+.drw-sec:last-child{border-right:none;}
+.drw-sec-title{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--txt3);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--b1);}
+.drw-item{font-size:11px;color:var(--txt);padding:3px 0;border-bottom:1px solid var(--b1);display:flex;gap:7px;line-height:1.5;}
+.drw-item:last-child{border-bottom:none;}
+.drw-bullet{color:var(--txt3);flex-shrink:0;}
+
+.footer{border-top:1px solid var(--b1);margin:0 52px;padding:12px 0;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--txt3);}
+</style>
+</head>
+<body>
+<div style="position:relative;z-index:1">
+
+<header class="hdr">
+  <div>
+    <div class="hdr-eye">System Architecture · v2.0 — Phase 1</div>
+    <h1>White-Label Component<br><em>×</em> Camunda 8.7 On-Premises</h1>
+    <div class="hdr-sub">Dynamic JSON form engine · Orchestration variable split · Synchronous persistence · 5-call API bridge · Append-only audit · Hard datastore isolation</div>
+  </div>
+  <div class="hdr-tags">
+    <span class="tag tb">Node.js Express</span><span class="tag tb">React 18</span><span class="tag tb">Angular 17</span>
+    <span class="tag tg">PostgreSQL 14+</span><span class="tag tt">Camunda 8.7</span><span class="tag tv">Zeebe Workers</span>
+    <span class="tag tc">On-Premises</span><span class="tag ts">Phase 2 Deferred</span>
+  </div>
+</header>
+
+<div class="legend">
+  <div class="leg"><div class="ldot" style="background:var(--blue)"></div>WLC Domain</div>
+  <div class="leg"><div class="ldot" style="background:var(--cam)"></div>Camunda Domain (Isolated)</div>
+  <div class="leg"><div class="ldot" style="background:var(--violet)"></div>WLC Datastore</div>
+  <div class="leg"><div class="ldot" style="background:var(--teal)"></div>API Bridge · 5 calls</div>
+  <div class="leg"><div class="ldot" style="background:var(--red)"></div>Audit / Immutable</div>
+  <div class="leg"><div class="ldot" style="background:var(--slate)"></div><span style="color:var(--slate)">Phase 2 Deferred</span></div>
+  <span class="leg-hint">↑ click nodes to inspect · ▶ expand DDL tables</span>
+</div>
+
+<!-- DETAIL DRAWER -->
+<div class="drawer" id="drawer-wrap" style="display:none"><div class="drawer-inner" id="drawer-inner"></div></div>
+
+<div class="wrap">
+
+<!-- WLC BOUNDARY -->
+<div style="border:1px solid rgba(79,142,247,.14);border-radius:14px;padding:18px;margin-bottom:18px;position:relative;background:rgba(79,142,247,.02);">
+<div style="position:absolute;top:-11px;left:20px;font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;padding:2px 14px;border-radius:4px;border:1px solid rgba(79,142,247,.22);background:var(--bg);color:rgba(79,142,247,.6)">WLC Platform Boundary</div>
+
+<!-- ① CLIENT LAYER -->
+<div class="row">
+  <div class="zone zb">
+    <div class="zone-lbl">① Client Layer — WLC Frontend</div>
+    <div class="zgrid g2">
+      <div class="nd ab" onclick="showNode('react')">
+        <div class="nd-hd"><div class="ic icb">⚛</div><div><div class="ntitle">React 18 SPA</div><div class="nsub">useWorkflowEngine · DynamicForm · renderField()</div></div></div>
+        <ul class="nbody">
+          <li>renderField() switches on field.type</li>
+          <li>Per-field badges: Orchestration Var / WLC Domain Object</li>
+          <li>showWhen conditional field visibility</li>
+          <li>Action buttons from availableActions array</li>
+          <li>Synchronous error display on submit failure</li>
+        </ul>
+      </div>
+      <div class="nd ab" onclick="showNode('angular')">
+        <div class="nd-hd"><div class="ic icb">🅰</div><div><div class="ntitle">Angular 17 SPA</div><div class="nsub">WorkflowStateService · Signals · ReactiveFormsModule</div></div></div>
+        <ul class="nbody">
+          <li>DynamicFieldComponent — one per FormField definition</li>
+          <li>WorkflowStateService — Angular Signals reactive state</li>
+          <li>ReactiveFormsModule — FormGroup from JSON schema</li>
+          <li>Field badges: Orchestration Var / WLC Domain Object</li>
+          <li>Synchronous error display on submit failure</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="arr"><div class="albl">HTTPS · form values collected · action selected</div><div class="aline"></div><div class="atip">▼</div></div>
+
+<!-- ② WLC API + CORE SERVICES -->
+<div class="row">
+  <div class="zone zb">
+    <div class="zone-lbl">② WLC API Server + Core Services — Node.js Express · Port 3001</div>
+    <div class="zgrid g3">
+      <div class="nd ab" onclick="showNode('apiServer')">
+        <div class="nd-hd"><div class="ic icb">🖥️</div><div><div class="ntitle">WLC API Server</div><div class="nsub">Express.js · REST boundary · Port 3001</div></div></div>
+        <ul class="nbody">
+          <li>HTTP boundary only — no business logic</li>
+          <li>Routes template requests → Form Template Engine</li>
+          <li>Routes submissions → Submission Orchestrator</li>
+          <li>Routes lifecycle ops → Workflow Lifecycle Manager</li>
+          <li>Enforces CORS · attaches X-Correlation-ID</li>
+        </ul>
+      </div>
+      <div class="nd ab" onclick="showNode('fte')">
+        <div class="nd-hd"><div class="ic icb">📋</div><div><div class="ntitle">Form Template Engine</div><div class="nsub">GET /api/workflows/:key/steps/:stepId/template</div></div></div>
+        <ul class="nbody">
+          <li>Loads form_definition JSONB from workflow_steps</li>
+          <li>Evaluates showWhen conditional visibility rules</li>
+          <li>Pre-fills fields on SEND_BACK from prior submission</li>
+          <li>Returns availableActions to constrain action buttons</li>
+          <li>Read-only — never writes to any DB</li>
+        </ul>
+      </div>
+      <div class="nd ab" onclick="showNode('so')">
+        <div class="nd-hd"><div class="ic icb">📤</div><div><div class="ntitle">Submission Orchestrator</div><div class="nsub">POST /api/instances/:instanceId/submit</div></div></div>
+        <ul class="nbody">
+          <li>Splits payload on camundaVar flag</li>
+          <li>camundaVar=true → orchestration vars → Workflow Lifecycle Manager</li>
+          <li>camundaVar=false → domain object data → WLC PostgreSQL</li>
+          <li>Persistence <strong style="color:var(--amber)">synchronous</strong> — DB write before Camunda call</li>
+          <li>Writes audit log entry in same atomic transaction</li>
+        </ul>
+      </div>
+      <div class="nd ab" onclick="showNode('wlm')">
+        <div class="nd-hd"><div class="ic icb">🔄</div><div><div class="ntitle">Workflow Lifecycle Manager</div><div class="nsub">Instance start · poll · recover · cancel</div></div></div>
+        <ul class="nbody">
+          <li>POST → starts Camunda instance · registers in process_instances</li>
+          <li>After submission: polls GET /v1/user-tasks for next taskDefinitionId</li>
+          <li>taskDefinitionId → triggers Form Template Engine lookup</li>
+          <li>GET /v1/process-instances/:key → state check on recovery</li>
+          <li>DELETE /v1/process-instances/:key → cancel on request</li>
+        </ul>
+      </div>
+      <div class="nd ar" onclick="showNode('alw')">
+        <div class="nd-hd"><div class="ic icr">📜</div><div><div class="ntitle">Audit Log Writer</div><div class="nsub">wlc_audit_log — append-only · immutable</div></div></div>
+        <ul class="nbody">
+          <li>Every submission → immutable audit entry</li>
+          <li>Records routing decision: orchestration vars + domain object data</li>
+          <li>Records persistence outcome synchronously</li>
+          <li>PostgreSQL rules block UPDATE and DELETE</li>
+          <li>log_audit_event() stored function — only write path</li>
+        </ul>
+      </div>
+      <div class="alert-strip aa-strip sp3" style="margin:4px 0 0;">
+        <strong>⚡ Submission Rule:</strong>&nbsp;Persistence is fully synchronous. If WLC DB write fails, submission is rejected — user must re-submit. Camunda task is NOT completed until all writes succeed.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="arr"><div class="albl">camundaVar=true → orchestration vars · camundaVar=false → domain object data → WLC PostgreSQL</div><div class="aline"></div><div class="atip">▼</div></div>
+
+<!-- ③ WLC DATASTORE -->
+<div class="row">
+  <div class="zone zv">
+    <div class="zone-lbl">③ WLC Datastore — PostgreSQL 14+ · On-Prem · Isolated · No Camunda Access</div>
+    <div class="zgrid g3">
+      <div class="nd av" onclick="showNode('dsWf')">
+        <div class="nd-hd"><div class="ic icv">📋</div><div><div class="ntitle">Workflow Registry</div><div class="nsub">camunda_workflows · workflow_steps</div></div></div>
+        <ul class="nbody">
+          <li>camunda_workflows — process definition keys + metadata</li>
+          <li>workflow_steps — form_definition JSONB per step (GIN indexed)</li>
+          <li>Source of truth for Form Template Engine</li>
+          <li>Written by admin API · never by frontend directly</li>
+        </ul>
+      </div>
+      <div class="nd av" onclick="showNode('dsSub')">
+        <div class="nd-hd"><div class="ic icv">📥</div><div><div class="ntitle">Domain Object Store</div><div class="nsub">process_instances · step_submissions</div></div></div>
+        <ul class="nbody">
+          <li>process_instances — runtime state + current step tracking</li>
+          <li>step_submissions.wlc_data — all camundaVar=false field values (JSONB)</li>
+          <li>step_submissions.camunda_variables — orchestration vars audit mirror</li>
+          <li>Immutable once written — no UPDATE on step_submissions</li>
+        </ul>
+      </div>
+      <div class="nd ar" onclick="showNode('dsAudit')">
+        <div class="nd-hd"><div class="ic icr">🔒</div><div><div class="ntitle">Audit Store</div><div class="nsub">wlc_audit_log — UPDATE/DELETE blocked by PG rules</div></div></div>
+        <ul class="nbody">
+          <li>18 event types via audit_event_type enum</li>
+          <li>PostgreSQL rules structurally prevent mutation</li>
+          <li>log_audit_event() stored function — only permitted write path</li>
+          <li>GIN index on payload JSONB for fast incident queries</li>
+        </ul>
+      </div>
+      <div class="alert-strip ar-strip sp3" style="margin:4px 0 0;">
+        <strong>⛔ Hard Isolation Boundary:</strong>&nbsp;WLC PostgreSQL has NO shared tables with Camunda. Camunda engine has ZERO access to this database. Domain object data NEVER crosses into Camunda — ever.
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /WLC boundary -->
+
+<div class="arr"><div class="albl">All WLC writes succeeded synchronously → POST Camunda task complete (orchestration vars only) → write audit → poll next task</div><div class="aline"></div><div class="atip">▼</div></div>
+
+<!-- ④ CAMUNDA DOMAIN -->
+<div class="row">
+  <div class="zone zt">
+    <div class="zone-lbl">④ Camunda 8.7 Domain — On-Premises · Hard Isolation Boundary</div>
+    <div class="zgrid g2">
+
+      <div class="nd at sp2" onclick="showNode('bridge')">
+        <div class="nd-hd"><div class="ic ict">🔗</div><div><div class="ntitle">WLC ↔ Camunda API Bridge — 5 Calls · Workflow Lifecycle Manager Only</div><div class="nsub">Only orchestration variables cross this boundary · domain object data NEVER crosses</div></div></div>
+        <div class="apicalls">
+          <div class="apicall">
+            <span class="mth mpost">POST</span><span class="apath">/v1/process-instances</span><span class="adesc">Start Process Instance — initiates alert investigation</span>
+            <div class="apayload">Body: <span>{ processDefinitionKey, variables: { initiatedBy } }</span> · Returns: <span>processInstanceKey → stored in process_instances</span></div>
+          </div>
+          <div class="apicall">
+            <span class="mth mget">GET</span><span class="apath">/v1/user-tasks?processInstanceKey=…</span><span class="adesc">Get Next User Task — poll after each submission</span>
+            <div class="apayload">Returns: <span>{ taskId, taskDefinitionId, candidateGroups }</span> · taskDefinitionId → next form_definition lookup</div>
+          </div>
+          <div class="apicall">
+            <span class="mth mpost">POST</span><span class="apath">/v1/tasks/:taskId/complete</span><span class="adesc">Complete User Task — advance workflow</span>
+            <div class="apayload">Body: <span>{ variables: { action, severity, … } }</span> · <strong style="color:var(--amber)">ONLY camundaVar=true orchestration fields · domain object data NEVER sent</strong></div>
+          </div>
+          <div class="apicall">
+            <span class="mth mget">GET</span><span class="apath">/v1/process-instances/:key</span><span class="adesc">Get Process Instance State — recovery when WLC state is stale</span>
+            <div class="apayload">Returns: <span>{ state: ACTIVE | COMPLETED | CANCELLED, variables }</span></div>
+          </div>
+          <div class="apicall">
+            <span class="mth mdel">DEL</span><span class="apath">/v1/process-instances/:key</span><span class="adesc">Cancel Process Instance — withdraw or duplicate alert</span>
+            <div class="apayload">Sets <span>process_instances.status = TERMINATED</span> in WLC DB · writes PROCESS_TERMINATED audit event</div>
+          </div>
+        </div>
+        <div class="alert-strip ab-strip" style="margin-top:10px;margin-bottom:0">
+          <strong>⚠ Orchestration vs Domain Object split:</strong>&nbsp;<span style="color:var(--txt2)">Fields with <code style="color:var(--teal)">camundaVar=true</code> (e.g. <code>action</code>, <code>severity</code>, <code>riskScore</code>) are <strong>orchestration variables</strong> — they drive FEEL gateway decisions. Fields with <code style="color:var(--teal)">camundaVar=false</code> (e.g. <code>analystName</code>, <code>iocList</code>, <code>affectedSystems</code>) are <strong>domain object data</strong> — written to WLC PostgreSQL only and never cross into Camunda.</span>
+        </div>
+      </div>
+
+      <div class="nd at" onclick="showNode('zeebe')">
+        <div class="nd-hd"><div class="ic ict">⚙</div><div><div class="ntitle">Zeebe Engine</div><div class="nsub">BPMN execution · FEEL gateways · alert-investigation-v1</div></div></div>
+        <ul class="nbody">
+          <li>Executes SOC L1 → L2 → QA process definition</li>
+          <li>FEEL evaluates orchestration vars (action · severity · riskScore)</li>
+          <li>SEND_BACK = native loop-back sequence flows in BPMN</li>
+          <li>Gateway splits on ESCALATE / CLOSE / SEND_BACK</li>
+          <li>Compliance check gateway: complianceFlag != "None"</li>
+        </ul>
+      </div>
+
+      <div class="nd at" onclick="showNode('worker')">
+        <div class="nd-hd"><div class="ic ict">👷</div><div><div class="ntitle">Zeebe Job Worker</div><div class="nsub">compliance-notify · triggered on QA CLOSE path only</div></div></div>
+        <ul class="nbody">
+          <li>Job type: compliance-notify · retries: 3</li>
+          <li>Triggered only when complianceFlag != "None"</li>
+          <li>Completely isolated from WLC platform code</li>
+          <li>Subscribes to job type in BPMN service task definition</li>
+          <li>Notifies: GDPR · PCI-DSS · HIPAA · SOX · Multiple</li>
+        </ul>
+      </div>
+
+      <div class="nd ar sp2" style="background:rgba(239,68,68,.04)" onclick="showNode('camDb')">
+        <div class="nd-hd"><div class="ic icr">🗃</div><div><div class="ntitle">Camunda Internal Stores — Hard Isolation Boundary</div><div class="nsub">Elasticsearch · Zeebe RocksDB · orchestration vars only · NO domain object data</div></div></div>
+        <ul class="nbody" style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">
+          <li>Process instance state — Zeebe RocksDB</li>
+          <li>Orchestration variables only (camundaVar=true)</li>
+          <li>Task history: created / completed timestamps</li>
+          <li>Visible in Camunda Operate UI + Operate REST API</li>
+          <li style="color:var(--red)">NO shared tables with WLC PostgreSQL — ever</li>
+          <li style="color:var(--red)">NO domain object data stored here — ever</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ⑤ SOC WORKFLOW -->
+<div class="divrow"><div class="divline"></div><div class="divlbl">Reference Workflow · SOC Alert Investigation</div><div class="divline"></div></div>
+<div class="row">
+  <div class="socflow">
+    <div class="soclbl">⑤ SOC Reference Workflow — L1 → L2 → QA Analysis</div>
+    <div class="socsteps">
+      <div class="socstep">
+        <div><div class="ssrole">User Task 1 · L1 Analyst</div><div class="sshd">L1 Alert Analysis</div></div>
+        <div class="ssacts"><span class="act actg">ESCALATE → L2</span><span class="act actr">CLOSE</span></div>
+        <div class="ssvars">Orchestration vars → Camunda</div>
+        <div class="ssdi" style="color:var(--teal);border-color:rgba(20,184,166,.25);background:rgba(20,184,166,.06);font-family:var(--mono);font-size:8px">action · severity · isFalsePositive · alertSource</div>
+        <div class="ssdom">
+          <div class="ssdlbl">Domain Object Data → WLC DB</div>
+          <div class="ssdi dig"><strong>analyst-record</strong><br>analystName · initialFindings · affectedAsset · alertId · actionNotes</div>
+        </div>
+      </div>
+      <div class="socarr"><div class="socarrl">FEEL: action=ESCALATE</div><div class="socarrb"></div><div class="socarrt">▶</div><div class="socarrl" style="margin-top:3px">loop-back SEND_BACK</div></div>
+      <div class="socstep">
+        <div><div class="ssrole">User Task 2 · L2 Analyst</div><div class="sshd">L2 Alert Analysis</div></div>
+        <div class="ssacts"><span class="act actg">ESCALATE → QA</span><span class="act actr">CLOSE</span><span class="act acta">SEND_BACK → L1</span></div>
+        <div class="ssvars">Orchestration vars → Camunda</div>
+        <div class="ssdi" style="color:var(--teal);border-color:rgba(20,184,166,.25);background:rgba(20,184,166,.06);font-family:var(--mono);font-size:8px">action · attackVector · containmentTaken · riskScore</div>
+        <div class="ssdom">
+          <div class="ssdlbl">Domain Object Data → WLC DB</div>
+          <div class="ssdi dig"><strong>analyst-record</strong><br>analystName · l1SummaryReview · iocList · actionNotes</div>
+          <div class="ssdi dia"><strong>incident-record</strong><br>affectedSystems · sendBackRequest</div>
+        </div>
+      </div>
+      <div class="socarr"><div class="socarrl">FEEL: action=ESCALATE</div><div class="socarrb"></div><div class="socarrt">▶</div><div class="socarrl" style="margin-top:3px">loop-back SEND_BACK</div></div>
+      <div class="socstep">
+        <div><div class="ssrole">User Task 3 · QA Analyst</div><div class="sshd">QA Analysis</div></div>
+        <div class="ssacts"><span class="act actr">CLOSE → compliance</span><span class="act acta">SEND_BACK → L2</span></div>
+        <div class="ssvars">Orchestration vars → Camunda</div>
+        <div class="ssdi" style="color:var(--teal);border-color:rgba(20,184,166,.25);background:rgba(20,184,166,.06);font-family:var(--mono);font-size:8px">action · investigationQuality · finalClassification · complianceFlag</div>
+        <div class="ssdom">
+          <div class="ssdlbl">Domain Object Data → WLC DB</div>
+          <div class="ssdi dig"><strong>analyst-record</strong><br>qaAnalystName · l1ReviewNotes · l2ReviewNotes · actionNotes</div>
+          <div class="ssdi dia"><strong>incident-record</strong><br>lessonsLearned · sendBackRequest</div>
+        </div>
+      </div>
+      <div class="socarr"><div class="socarrl">FEEL: action=CLOSE</div><div class="socarrb"></div><div class="socarrt">▶</div></div>
+      <div class="socstep" style="background:rgba(20,184,166,.06);border-color:rgba(20,184,166,.2)">
+        <div><div class="ssrole">Service Task</div><div class="sshd">Compliance Notification</div></div>
+        <div class="ssdom" style="margin-top:4px">
+          <div class="ssdi dig"><strong>Zeebe Job Worker</strong><br>compliance-notify<br>NOT inline WLC code</div>
+        </div>
+        <div class="ssacts"><span class="act actr">→ End Event</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑥ PIPELINE -->
+<div class="divrow"><div class="divline"></div><div class="divlbl">Submission Data Flow — Synchronous</div><div class="divline"></div></div>
+<div class="row">
+  <div class="pipe-wrap">
+    <div class="pipe-lbl">⑥ Form Submit → Split → Persist (sync) → Camunda Advance → Audit → Next Template</div>
+    <div class="pipe">
+      <div class="pstep"><div class="pbox" style="border-color:rgba(79,142,247,.3);color:var(--blue)">User submits form</div><div class="psub">Frontend</div></div>
+      <div class="parr"></div>
+      <div class="pstep"><div class="pbox" style="border-color:rgba(79,142,247,.3);color:var(--blue)">API Server receives</div><div class="psub">CORS · CorrelID</div></div>
+      <div class="parr"></div>
+      <div class="pstep"><div class="pbox" style="border-color:rgba(79,142,247,.3);color:var(--blue)">Split on camundaVar</div><div class="psub">Submission Orchestrator</div></div>
+      <div class="parr"></div>
+      <div class="pstep"><div class="pbox" style="border-color:rgba(167,139,250,.3);color:var(--violet)">Write domain object data (sync)</div><div class="psub">WLC PostgreSQL</div></div>
+      <div class="parr"></div>
+      <div class="pstep"><div class="pbox" style="border-color:rgba(239,68,68,.3);color:var(--red)">Fail? → reject · user re-submits · Camunda NOT called</div><div class="psub">Sync error</div></div>
+      <div class="parr"></div>
+      <div class="pstep"><div class="pbox" style="border-color:rgba(20,184,166,.3);color:var(--teal)">POST task complete → Camunda</div><div class="psub">Orchestration vars only</div></div>
+      <div class="parr"></div>
+      <div class="pstep"><div class="pbox" style="border-color:rgba(239,68,68,.3);color:var(--red)">Write audit log</div><div class="psub">Append-only</div></div>
+      <div class="parr"></div>
+      <div class="pstep"><div class="pbox" style="border-color:rgba(20,184,166,.3);color:var(--teal)">Poll GET user-tasks</div><div class="psub">taskDefinitionId</div></div>
+      <div class="parr"></div>
+      <div class="pstep"><div class="pbox" style="border-color:rgba(79,142,247,.3);color:var(--blue)">Fetch next form_definition</div><div class="psub">Form Template Engine</div></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /.wrap -->
+
+<!-- DB TABLES -->
+<div class="dbwrap">
+
+  <!-- WLC DB -->
+  <div class="csection">
+    <div class="chdr" onclick="toggleSection('wdb')">
+      <div class="ctoggle" id="tog-wdb">▶</div>
+      <div class="ctitle">WLC PostgreSQL — Table Schemas</div>
+      <span class="cbadge cbadge-b">5 tables · wlc_camunda database</span>
+      <span class="csub">click to expand DDL ▶</span>
+    </div>
+    <div class="cbody" id="wdb">
+      <div class="dbgrid">
+
+        <div class="ddlcard">
+          <div class="ddlchdr" onclick="toggleDDL('w1')"><span class="ddlicon">📋</span><span class="ddlname">camunda_workflows</span><span class="ddlbadge ddlbadge-b">8 cols</span><span class="ddltog" id="ddl-w1">▶</span></div>
+          <div class="tbl-purpose">Process definition registry — maps Camunda process keys to WLC display metadata</div>
+          <div class="ddlcols" id="w1" style="display:none">
+            <div class="col cpk"><span class="cn">id</span><span class="ct">SERIAL</span><span class="cc">Primary key</span></div>
+            <div class="col cidx"><span class="cn">camunda_process_key</span><span class="ct">VARCHAR(255)</span><span class="cc cnote-warn">UNIQUE · must match BPMN id= exactly</span></div>
+            <div class="col"><span class="cn">display_name</span><span class="ct">VARCHAR(255)</span><span class="cc">Shown in UI sidebar</span></div>
+            <div class="col"><span class="cn">description</span><span class="ct">TEXT</span></div>
+            <div class="col"><span class="cn">version</span><span class="ct">VARCHAR(50)</span><span class="cc">Semantic version e.g. 1.0.0</span></div>
+            <div class="col"><span class="cn">is_active</span><span class="ct">BOOLEAN</span><span class="cc">Soft-disable workflow</span></div>
+            <div class="col"><span class="cn">camunda_definition_key</span><span class="ct">BIGINT</span><span class="cc">Numeric key from Camunda deploy API</span></div>
+            <div class="col"><span class="cn">created_at / updated_at</span><span class="ct">TIMESTAMPTZ</span><span class="cc">Auto via trigger</span></div>
+          </div>
+        </div>
+
+        <div class="ddlcard">
+          <div class="ddlchdr" onclick="toggleDDL('w2')"><span class="ddlicon">📝</span><span class="ddlname">workflow_steps</span><span class="ddlbadge ddlbadge-b">9 cols</span><span class="ddltog" id="ddl-w2">▶</span></div>
+          <div class="tbl-purpose">JSON form_definition per step — GIN indexed JSONB · source of truth for Form Template Engine</div>
+          <div class="ddlcols" id="w2" style="display:none">
+            <div class="col cpk"><span class="cn">id</span><span class="ct">SERIAL</span><span class="cc">Primary key</span></div>
+            <div class="col cfk"><span class="cn">workflow_id</span><span class="ct">INTEGER</span><span class="cc">FK → camunda_workflows.id</span></div>
+            <div class="col cidx"><span class="cn">camunda_step_id</span><span class="ct">VARCHAR(255)</span><span class="cc cnote-warn">Matches BPMN userTask id= exactly</span></div>
+            <div class="col"><span class="cn">step_name</span><span class="ct">VARCHAR(255)</span><span class="cc">UI progress tracker label</span></div>
+            <div class="col"><span class="cn">step_order</span><span class="ct">SMALLINT</span><span class="cc">Zero-based position in workflow</span></div>
+            <div class="col cjsonb"><span class="cn">form_definition</span><span class="ct">JSONB NOT NULL</span><span class="cc cnote-warn">Full JSON schema · GIN indexed · renderer source of truth</span></div>
+            <div class="col cjsonb"><span class="cn">validation_schema</span><span class="ct">JSONB</span><span class="cc">Server-side validation rules</span></div>
+            <div class="col"><span class="cn">is_active</span><span class="ct">BOOLEAN</span><span class="cc">Soft-disable step</span></div>
+            <div class="col"><span class="cn">created_at / updated_at</span><span class="ct">TIMESTAMPTZ</span></div>
+          </div>
+        </div>
+
+        <div class="ddlcard">
+          <div class="ddlchdr" onclick="toggleDDL('w3')"><span class="ddlicon">🔄</span><span class="ddlname">process_instances</span><span class="ddlbadge ddlbadge-b">9 cols</span><span class="ddltog" id="ddl-w3">▶</span></div>
+          <div class="tbl-purpose">Runtime instance tracking — one row per WLC-initiated Camunda process instance</div>
+          <div class="ddlcols" id="w3" style="display:none">
+            <div class="col cpk"><span class="cn">id</span><span class="ct">SERIAL</span><span class="cc">WLC internal primary key</span></div>
+            <div class="col cfk"><span class="cn">workflow_id</span><span class="ct">INTEGER</span><span class="cc">FK → camunda_workflows.id</span></div>
+            <div class="col cidx"><span class="cn">camunda_instance_key</span><span class="ct">BIGINT UNIQUE</span><span class="cc cnote-warn">Key from POST /v1/process-instances</span></div>
+            <div class="col cfk"><span class="cn">current_step_id</span><span class="ct">INTEGER</span><span class="cc">FK → workflow_steps.id</span></div>
+            <div class="col"><span class="cn">current_camunda_task_id</span><span class="ct">VARCHAR(255)</span><span class="cc cnote-warn">Active task id from GET /v1/user-tasks</span></div>
+            <div class="col"><span class="cn">status</span><span class="ct">ENUM</span><span class="cc">ACTIVE · COMPLETED · TERMINATED · INCIDENT</span></div>
+            <div class="col"><span class="cn">initiated_by</span><span class="ct">VARCHAR(255)</span><span class="cc">User or system actor</span></div>
+            <div class="col"><span class="cn">started_at</span><span class="ct">TIMESTAMPTZ</span></div>
+            <div class="col"><span class="cn">completed_at</span><span class="ct">TIMESTAMPTZ</span><span class="cc">Set when COMPLETED or TERMINATED</span></div>
+          </div>
+        </div>
+
+        <div class="ddlcard">
+          <div class="ddlchdr" onclick="toggleDDL('w4')"><span class="ddlicon">📥</span><span class="ddlname">step_submissions</span><span class="ddlbadge ddlbadge-b">9 cols</span><span class="ddltog" id="ddl-w4">▶</span></div>
+          <div class="tbl-purpose">Immutable domain object data store — wlc_data holds all camundaVar=false field values as JSONB</div>
+          <div class="ddlcols" id="w4" style="display:none">
+            <div class="col cpk"><span class="cn">id</span><span class="ct">BIGSERIAL</span><span class="cc">High-volume append primary key</span></div>
+            <div class="col cfk"><span class="cn">instance_id</span><span class="ct">INTEGER</span><span class="cc">FK → process_instances.id</span></div>
+            <div class="col cfk"><span class="cn">step_id</span><span class="ct">INTEGER</span><span class="cc">FK → workflow_steps.id</span></div>
+            <div class="col cjsonb"><span class="cn">wlc_data</span><span class="ct">JSONB NOT NULL</span><span class="cc cnote-warn">Domain object data · camundaVar=false · GIN indexed</span></div>
+            <div class="col cjsonb"><span class="cn">camunda_variables</span><span class="ct">JSONB NOT NULL</span><span class="cc">Orchestration vars audit mirror</span></div>
+            <div class="col"><span class="cn">camunda_task_id</span><span class="ct">VARCHAR(255)</span><span class="cc">Task completed in Camunda</span></div>
+            <div class="col"><span class="cn">submitted_by</span><span class="ct">VARCHAR(255)</span></div>
+            <div class="col"><span class="cn">correlation_id</span><span class="ct">VARCHAR(100)</span><span class="cc">X-Correlation-ID tracing</span></div>
+            <div class="col cimmut"><span class="cn">submitted_at</span><span class="ct">TIMESTAMPTZ</span><span class="cc">Immutable — no updated_at</span></div>
+          </div>
+        </div>
+
+        <div class="ddlcard" style="grid-column:span 2">
+          <div class="ddlchdr" onclick="toggleDDL('w5')"><span class="ddlicon">🔒</span><span class="ddlname">wlc_audit_log</span><span class="ddlbadge ddlbadge-b">11 cols · UPDATE + DELETE blocked by PG rules</span><span class="ddltog" id="ddl-w5">▶</span></div>
+          <div class="tbl-purpose">Append-only audit trail — PG rules block UPDATE and DELETE · log_audit_event() stored function is the only permitted write path · 18 event types</div>
+          <div class="ddlcols" id="w5" style="display:none">
+            <div class="col cpk"><span class="cn">id</span><span class="ct">BIGSERIAL</span><span class="cc">High-volume append key</span></div>
+            <div class="col cidx"><span class="cn">event_type</span><span class="ct">audit_event_type ENUM</span><span class="cc cnote-warn">18 types: PROCESS_STARTED · TASK_COMPLETED · STEP_DATA_SAVED…</span></div>
+            <div class="col cfk"><span class="cn">workflow_id</span><span class="ct">INTEGER</span><span class="cc">FK → camunda_workflows</span></div>
+            <div class="col cfk"><span class="cn">instance_id</span><span class="ct">INTEGER</span><span class="cc">FK → process_instances</span></div>
+            <div class="col cfk"><span class="cn">step_id</span><span class="ct">INTEGER</span><span class="cc">FK → workflow_steps</span></div>
+            <div class="col cidx"><span class="cn">camunda_instance_key</span><span class="ct">BIGINT</span><span class="cc">Denormalised for fast incident lookup</span></div>
+            <div class="col"><span class="cn">camunda_task_id</span><span class="ct">VARCHAR(255)</span></div>
+            <div class="col cjsonb"><span class="cn">payload</span><span class="ct">JSONB</span><span class="cc">Event-specific data · GIN indexed</span></div>
+            <div class="col"><span class="cn">actor</span><span class="ct">VARCHAR(255)</span></div>
+            <div class="col"><span class="cn">correlation_id</span><span class="ct">VARCHAR(100)</span></div>
+            <div class="col cidx"><span class="cn">occurred_at</span><span class="ct">TIMESTAMPTZ</span><span class="cc cnote-warn">Partition key · IDX DESC</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Camunda DB -->
+  <div class="csection">
+    <div class="chdr" onclick="toggleSection('cdb')">
+      <div class="ctoggle" id="tog-cdb">▶</div>
+      <div class="ctitle">Camunda Internal Stores — Key Schemas</div>
+      <span class="cbadge cbadge-c">Elasticsearch + RocksDB · No WLC write access · Read via Operate API only</span>
+      <span class="csub">click to expand ▶</span>
+    </div>
+    <div class="cbody" id="cdb">
+      <div class="dbgrid2">
+
+        <div class="ddlcard">
+          <div class="ddlchdr" onclick="toggleDDL('c1')"><span class="ddlicon">⚡</span><span class="ddlname">Process Variables Store</span><span class="ddlbadge ddlbadge-c">Zeebe RocksDB</span><span class="ddltog" id="ddl-c1">▶</span></div>
+          <div class="tbl-purpose">Orchestration variables only — written via POST /v1/tasks/:taskId/complete · domain object data NEVER stored here</div>
+          <div class="ddlcols" id="c1" style="display:none">
+            <div class="col cpk"><span class="cn">processInstanceKey</span><span class="ct">BIGINT</span><span class="cc cnote-warn">= WLC process_instances.camunda_instance_key</span></div>
+            <div class="col"><span class="cn">action</span><span class="ct">STRING</span><span class="cc cnote-warn">ESCALATE · CLOSE · SEND_BACK — drives XOR gateways</span></div>
+            <div class="col"><span class="cn">severity</span><span class="ct">STRING</span><span class="cc">Critical · High · Medium · Low</span></div>
+            <div class="col"><span class="cn">riskScore</span><span class="ct">STRING</span><span class="cc">1–5 · score ≥ 4 auto-escalate gateway</span></div>
+            <div class="col"><span class="cn">attackVector</span><span class="ct">STRING</span><span class="cc">MITRE ATT&CK tactic</span></div>
+            <div class="col"><span class="cn">containmentTaken</span><span class="ct">STRING</span><span class="cc">Triggers containment notification</span></div>
+            <div class="col"><span class="cn">isFalsePositive</span><span class="ct">STRING</span><span class="cc">Confirmed Threat → Confirmed False Positive</span></div>
+            <div class="col"><span class="cn">complianceFlag</span><span class="ct">STRING</span><span class="cc cnote-warn">None / GDPR / PCI-DSS — triggers compliance service task</span></div>
+            <div class="col"><span class="cn">investigationQuality</span><span class="ct">STRING</span><span class="cc">Excellent · Acceptable · Needs Improvement · Inadequate</span></div>
+            <div class="col"><span class="cn">finalClassification</span><span class="ct">STRING</span><span class="cc">True Positive / False Positive classification</span></div>
+          </div>
+        </div>
+
+        <div class="ddlcard">
+          <div class="ddlchdr" onclick="toggleDDL('c2')"><span class="ddlicon">📊</span><span class="ddlname">Process Instance State</span><span class="ddlbadge ddlbadge-c">Elasticsearch</span><span class="ddltog" id="ddl-c2">▶</span></div>
+          <div class="tbl-purpose">Process instance lifecycle state — queried by Camunda Operate and WLC recovery call GET /v1/process-instances/:key</div>
+          <div class="ddlcols" id="c2" style="display:none">
+            <div class="col cpk"><span class="cn">key</span><span class="ct">BIGINT</span><span class="cc cnote-warn">= WLC process_instances.camunda_instance_key</span></div>
+            <div class="col"><span class="cn">bpmnProcessId</span><span class="ct">STRING</span><span class="cc">alert-investigation-v1</span></div>
+            <div class="col"><span class="cn">state</span><span class="ct">ENUM</span><span class="cc">ACTIVE · COMPLETED · CANCELLED · INCIDENT</span></div>
+            <div class="col"><span class="cn">startDate</span><span class="ct">DATETIME</span><span class="cc">ISO 8601</span></div>
+            <div class="col"><span class="cn">endDate</span><span class="ct">DATETIME</span><span class="cc">Set when COMPLETED or CANCELLED</span></div>
+            <div class="col"><span class="cn">hasActiveOperation</span><span class="ct">BOOLEAN</span><span class="cc">Incident or retry in progress</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.dbwrap -->
+
+<div class="footer">
+  <span>WLC · Camunda 8.7 · Datastore Separation Architecture · v2.0 · WLC Engineering</span>
+  <span>↑ click nodes to inspect · ▶ expand DDL tables</span>
+</div>
+
+</div>
+
+<script>
+const NODES = {
+  react:{name:'React 18 SPA',sub:'useWorkflowEngine · DynamicForm · renderField()',responsibilities:['renderField() switches on field.type to produce the correct input element','Per-field badges show Orchestration Var or WLC Domain Object','showWhen conditional field visibility driven by form_definition rules','ESCALATE / CLOSE / SEND_BACK action buttons from availableActions array','Synchronous error display when submission fails — user must re-submit'],interfaces:['GET /api/workflows/:key/steps/:stepId/template — fetch form schema','POST /api/instances/:instanceId/submit — submit step data','useWorkflowEngine hook manages all workflow state and routing'],dataStore:['No direct DB access — all via WLC API Server','No Camunda API access — all via Workflow Lifecycle Manager','Session state in browser memory only']},
+  angular:{name:'Angular 17 SPA',sub:'WorkflowStateService · Signals · ReactiveFormsModule',responsibilities:['DynamicFieldComponent — one component per FormField definition','WorkflowStateService manages all state via Angular 17 Signals','ReactiveFormsModule — FormGroup built programmatically from JSON schema','Field badges: Orchestration Var / WLC Domain Object','Synchronous error display when submission fails'],interfaces:['GET /api/workflows/:key/steps/:stepId/template','POST /api/instances/:instanceId/submit','SchemaService — schema fetch + payload split','WorkflowStateService signals: currentStepId · history · camundaVars · wlcData'],dataStore:['No direct DB access','No Camunda API access','Angular Signals for in-session reactive state only']},
+  apiServer:{name:'WLC API Server',sub:'Express.js · Node 18 · Port 3001',responsibilities:['HTTP boundary only — contains no business logic','Routes template requests → Form Template Engine','Routes submissions → Submission Orchestrator','Routes lifecycle operations → Workflow Lifecycle Manager','Enforces CORS · attaches X-Correlation-ID for request tracing'],interfaces:['GET /api/workflows/:key/steps/:stepId/template','POST /api/instances/:instanceId/submit','POST /api/instances — register new instance','PUT /api/admin/workflows/:key/steps/:stepId — upsert template'],dataStore:['No direct DB access — pure HTTP request router','Does not write to Camunda DB','Does not write to WLC PostgreSQL directly']},
+  fte:{name:'Form Template Engine',sub:'GET /api/workflows/:key/steps/:stepId/template',responsibilities:['Loads form_definition JSONB from workflow_steps for the given camunda_step_id','Evaluates showWhen conditional field visibility rules server-side','Pre-fills fields on SEND_BACK from prior step_submissions.wlc_data','Returns availableActions array to constrain which action buttons are shown','Read-only — never writes to any DB or calls Camunda'],interfaces:['Reads workflow_steps WHERE camunda_step_id = :stepId — hot path','Uses v_step_form_templates join view for enriched response','Called on every step render after Camunda user-task poll'],dataStore:['Reads workflow_steps.form_definition from WLC PostgreSQL only','No write access to any table','No access to Camunda datastore']},
+  so:{name:'Submission Orchestrator',sub:'POST /api/instances/:instanceId/submit',responsibilities:['Splits payload on camundaVar flag — the core routing decision','camundaVar=true fields → orchestration vars → Workflow Lifecycle Manager','camundaVar=false fields → domain object data → WLC PostgreSQL','Persistence is synchronous — DB write must succeed before any Camunda call','Writes audit log entry atomically in same DB transaction as submission write'],interfaces:['db.transaction() — atomic: step_submissions + wlc_audit_log + process_instances update','Delegates Camunda task completion to Workflow Lifecycle Manager after DB succeeds','Returns per-field routing outcome on failure so frontend can show specific error'],dataStore:['Writes wlc_data to step_submissions (sole writer of domain object data)','Writes camunda_variables audit mirror to step_submissions','Writes STEP_DATA_SAVED event to wlc_audit_log','Updates process_instances.current_step_id after successful advance']},
+  wlm:{name:'Workflow Lifecycle Manager',sub:'Instance start · poll · recover · cancel',responsibilities:['POST → starts Camunda process instance · registers camunda_instance_key in process_instances','After each submission: polls GET /v1/user-tasks to get next taskDefinitionId','taskDefinitionId → triggers Form Template Engine for next form_definition lookup','GET /v1/process-instances/:key → instance state check for recovery when WLC state is stale','DELETE /v1/process-instances/:key → cancel investigation on explicit operator request'],interfaces:['POST /v1/process-instances — Start Process Instance','POST /v1/tasks/:taskId/complete — Complete User Task (orchestration vars only)','GET /v1/user-tasks?processInstanceKey=… — Get Next User Task','GET /v1/process-instances/:key — Get Process Instance State','DELETE /v1/process-instances/:key — Cancel Process Instance'],dataStore:['Writes camunda_instance_key to process_instances on start','Updates process_instances.current_camunda_task_id after each poll','Sets process_instances.status = COMPLETED or TERMINATED on end','Reads Camunda internal DB via REST only — no direct DB connection']},
+  alw:{name:'Audit Log Writer',sub:'wlc_audit_log — append-only · immutable',responsibilities:['Every submission creates an immutable audit log entry in same transaction','Records the routing decision: which fields went to Camunda vs WLC DB','Records persistence outcome synchronously — failure is also audited','PostgreSQL rules prevent UPDATE and DELETE — structurally tamper-proof','log_audit_event() stored function is the only permitted write path'],interfaces:['log_audit_event() PostgreSQL stored function — called within db.transaction()','18 event types: PROCESS_STARTED · TASK_COMPLETED · STEP_DATA_SAVED · PROCESS_COMPLETED…','GET /api/instances/:key/audit — exposes audit trail for compliance reporting'],dataStore:['Writes to wlc_audit_log only (append-only)','PostgreSQL rules block UPDATE and DELETE on wlc_audit_log','No Camunda access']},
+  bridge:{name:'WLC ↔ Camunda API Bridge',sub:'5 calls · Workflow Lifecycle Manager only · orchestration vars only',responsibilities:['Only 5 REST calls cross the WLC ↔ Camunda domain boundary','All 5 calls are made exclusively by Workflow Lifecycle Manager','Only orchestration variables (camundaVar=true) ever cross this boundary','Domain object data (camundaVar=false) NEVER crosses into Camunda — ever','Camunda has no call-back or push mechanism into WLC'],interfaces:['POST /v1/process-instances — Start Process Instance','GET /v1/user-tasks?processInstanceKey=… — Get Next User Task','POST /v1/tasks/:taskId/complete — Complete User Task','GET /v1/process-instances/:key — Get Process Instance State','DELETE /v1/process-instances/:key — Cancel Process Instance'],dataStore:['WLC PostgreSQL and Camunda DB share NO data directly','The only data Camunda ever receives is what passes through these 5 REST calls','Camunda stores orchestration variables in its own internal RocksDB — no WLC access']},
+  zeebe:{name:'Zeebe Engine',sub:'BPMN execution · FEEL gateways · alert-investigation-v1',responsibilities:['Executes alert-investigation-v1.bpmn process definition on-prem','FEEL expressions evaluate orchestration vars: action · severity · riskScore','SEND_BACK paths are native loop-back sequence flows — no special handling needed','Compliance check: exclusive gateway on complianceFlag after QA CLOSE','Routes to one of 3 end events: Closed at L1 / Closed at L2 / Investigation Complete'],interfaces:['Receives orchestration variables via POST /v1/tasks/:taskId/complete','Returns active user task via GET /v1/user-tasks','Triggers compliance-notify Zeebe job when complianceFlag != "None"'],dataStore:['Writes orchestration variables to Zeebe RocksDB','Process state indexed in Elasticsearch for Operate UI','ZERO access to WLC PostgreSQL']},
+  worker:{name:'Zeebe Job Worker',sub:'compliance-notify · isolated from WLC code',responsibilities:['Subscribes to job type compliance-notify declared in BPMN service task','Triggered only on QA CLOSE path when complianceFlag != "None"','Notifies relevant regulatory team: GDPR · PCI-DSS · HIPAA · SOX · Multiple','Completely isolated from WLC platform code — separate Node.js process','Configured with retries: 3 in BPMN service task definition'],interfaces:['Zeebe client subscription to job type compliance-notify','Receives variables: complianceFlag · finalClassification · alertId from Zeebe','Calls external notification API or sends regulatory email'],dataStore:['No access to WLC PostgreSQL','No access to Camunda internal DB directly — variables passed by BPMN service task only']},
+  camDb:{name:'Camunda Internal Stores',sub:'Elasticsearch + Zeebe RocksDB · Hard Isolation Boundary',responsibilities:['Stores orchestration variables submitted via POST /v1/tasks/:taskId/complete','Stores process instance state and task lifecycle history','Powers Camunda Operate monitoring dashboards and REST API','Read by WLC Workflow Lifecycle Manager via GET /v1/process-instances/:key (state check only)'],interfaces:['Written by Zeebe engine internally — not by WLC directly','Read by Camunda Operate UI (Elasticsearch queries)','Read-only access via GET /v1/process-instances/:key from WLC'],dataStore:['Orchestration variables only: action · severity · riskScore · attackVector · complianceFlag…','Instance state: ACTIVE / COMPLETED / CANCELLED / INCIDENT','NO domain object data stored here — EVER','NO shared tables with WLC PostgreSQL — EVER']},
+  dsWf:{name:'Workflow Registry',sub:'camunda_workflows · workflow_steps',responsibilities:['camunda_workflows — registry of Camunda process definition keys and WLC display metadata','workflow_steps — stores form_definition JSONB for every user task step','GIN index on form_definition enables fast JSONB path queries','Source of truth for Form Template Engine on every step render'],interfaces:['Read by Form Template Engine on every template request — hot path','Written by admin via PUT /api/admin/workflows/:key/steps/:stepId','v_step_form_templates view joins both tables for the API response'],dataStore:['WLC PostgreSQL — wlc_camunda database','No Camunda access to these tables','No direct frontend access — API Server only']},
+  dsSub:{name:'Domain Object Store',sub:'process_instances · step_submissions',responsibilities:['process_instances — tracks active Camunda instance key + current step in WLC','step_submissions.wlc_data — canonical store for all domain object field values','step_submissions.camunda_variables — audit mirror of orchestration vars sent to Camunda','Immutable once written — no UPDATE allowed on step_submissions rows'],interfaces:['Written by Submission Orchestrator in atomic transaction','Read by GET /api/instances/:key/history for reporting','process_instances updated by Workflow Lifecycle Manager on each step advance'],dataStore:['wlc_data JSONB — camundaVar=false fields only · GIN indexed','camunda_variables JSONB — audit mirror · never source of truth','Camunda has ZERO access to either JSONB column']},
+  dsAudit:{name:'Audit Store',sub:'wlc_audit_log — append-only · tamper-proof',responsibilities:['Append-only record of every WLC process lifecycle event','PostgreSQL rules structurally block UPDATE and DELETE','log_audit_event() stored function is the only permitted write path','18 event types cover the full lifecycle from PROCESS_STARTED to PROCESS_COMPLETED'],interfaces:['Written via log_audit_event() stored function — called within transaction','Read by GET /api/instances/:key/audit for compliance reporting','GIN index on payload JSONB for fast incident investigation queries'],dataStore:['wlc_audit_log — WLC PostgreSQL only','No Camunda access','No direct frontend access — API Server only']},
+};
+
+let active=null;
+function showNode(id){
+  const wrap=document.getElementById('drawer-wrap');
+  const inner=document.getElementById('drawer-inner');
+  if(active===id){active=null;wrap.style.display='none';return;}
+  active=id;
+  const d=NODES[id];if(!d)return;
+  inner.innerHTML=`<div class="drw-hd"><div><div class="drw-title">${d.name}</div><div class="drw-sub">${d.sub}</div></div><button class="drw-close" onclick="showNode('${id}')">✕ close</button></div><div class="drw-body">${[['Responsibilities',d.responsibilities],['Interfaces / APIs',d.interfaces],['Data Store Access',d.dataStore]].map(([t,items])=>`<div class="drw-sec"><div class="drw-sec-title">${t}</div>${items.map(i=>`<div class="drw-item"><span class="drw-bullet">›</span>${i}</div>`).join('')}</div>`).join('')}</div>`;
+  wrap.style.display='block';
+  wrap.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function toggleSection(id){
+  const b=document.getElementById(id);
+  const t=document.getElementById('tog-'+id);
+  const o=b.classList.contains('open');
+  b.classList.toggle('open',!o);
+  t.classList.toggle('open',!o);
+  t.textContent=o?'▶':'▼';
+}
+
+function toggleDDL(id){
+  const c=document.getElementById(id);
+  const t=document.getElementById('ddl-'+id);
+  const o=c.style.display!=='none';
+  c.style.display=o?'none':'flex';
+  c.style.flexDirection='column';
+  t.classList.toggle('open',!o);
+}
+
+document.querySelectorAll('.nd,.ddlcard').forEach((el,i)=>{
+  el.style.opacity='0';el.style.transform='translateY(10px)';
+  el.style.transition=`opacity .35s ease ${i*22}ms,transform .35s ease ${i*22}ms,border-color .18s,box-shadow .18s`;
+  requestAnimationFrame(()=>setTimeout(()=>{el.style.opacity='1';el.style.transform='translateY(0)'},i*22));
+});
+</script>
+</body>
+</html>
